@@ -51,7 +51,7 @@
   .iconbtn svg { width: 16px; height: 16px; display: block; }
 
   /* Unit segmented control (Dims style). */
-  .seg { display: flex; gap: 4px; margin: 8px 0 4px; }
+  .seg { display: flex; gap: 4px; margin: 8px 0 2px; }
   .seg button {
     flex: 1; height: 26px; cursor: pointer; font-size: 11px;
     border: 1px solid var(--figma-color-border, #d9d9d9); border-radius: 4px;
@@ -65,7 +65,7 @@
   .sec { margin: 0; }
   .sec > summary {
     list-style: none; cursor: pointer; user-select: none;
-    margin: 12px 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; opacity: .6;
+    margin: 6px 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; opacity: .6;
     display: flex; align-items: center; gap: 6px;
   }
   .sec > summary::-webkit-details-marker { display: none; }
@@ -79,7 +79,7 @@
   .check label { opacity: .9; }
 
   /* Live pixel readout. */
-  #preview { margin: 8px 0 0; font-size: 10px; opacity: .55; min-height: 13px; }
+  #preview { margin: 4px 0 0; font-size: 10px; opacity: .55; min-height: 13px; }
 
   .actions { display: flex; gap: 8px; margin-top: 10px; }
   .actions button {
@@ -291,7 +291,9 @@
 
   function syncHeight() {
     requestAnimationFrame(() => {
-      const last = el('apply');
+      // Measure to the last visible element (the coffee footer) so the window
+      // always grows enough to include it — not just up to the Set button.
+      const last = document.querySelector('.footer') || el('apply');
       const h = Math.ceil(last.offsetTop + last.offsetHeight) + 12;
       parent.postMessage({ pluginMessage: { type: 'resize', height: h } }, '*');
     });

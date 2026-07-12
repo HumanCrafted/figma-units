@@ -1,42 +1,32 @@
 # Units
 
-A small, focused Figma plugin that sets a node's true pixel dimensions from a
+A focused Figma plugin that sets a node's true pixel dimensions from a
 real-world measurement. Draw a box or line, select it, type a width and/or
 height in a chosen unit (at a chosen DPI), and Units converts to pixels and
 resizes the node.
 
-It's the inverse of **Dims** — Dims *reads* pixel dimensions and displays them
-as real-world units; Units takes a real-world unit as input and *sets* the
-pixels. They're deliberately separate plugins that share one conversion model:
-
-```
-PER_INCH = { in: 1, ft: 1/12, mm: 25.4, cm: 2.54, m: 0.0254 }
-Dims  (read):  value  = (pixels / dpi) * PER_INCH[unit] / scale
-Units (write): pixels = (value / PER_INCH[unit]) * dpi * scale
-```
-
-## Features (v1)
+## Features
 
 - Set **width and/or height** in `in`, `ft`, `mm`, `cm`, or `m` at any DPI.
 - **Drawing scale** — enter `1`, `0.25`, or a fraction like `1/4`; the entered
-  value is the real-world size and the node is set to `size / scale` on canvas.
+value is the real-world size and the node is set to `size / scale` on canvas.
 - Single-field entry — set just W or just H, leaving the other unchanged.
 - Works on **rectangles, frames** (and other resizable containers), and **lines**
-  (a line's width is set as its geometric length via `resize(len, 0)`).
+(a line's width is set as its geometric length via `resize(len, 0)`).
 - Current size **prefills** the fields in the chosen unit when one node is selected.
 - **Lock aspect ratio** — set one dimension, scale the other proportionally.
 - **Resize from center** — reposition after resize instead of pinning top-left.
 - **Ignore child constraints** — `resizeWithoutConstraints()` for frames with children.
 - **Apply to all selected** — same dimensions to every selected node (explicit; a
-  multi-selection won't silently resize just one).
+multi-selection won't silently resize just one).
 - DPI and unit persist across sessions via `clientStorage`.
 
-## Roadmap (v2)
+## Roadmap
 
 - Rotated lines via the Dims measured-span (`0..LEN`) approach.
 - Snap-to-unit: round moved/resized nodes to whole units on `documentchange`
-  (`pxPerUnit = (1 / PER_INCH[unit]) * dpi`), with an optional readout for the
-  native Preferences → Nudge amount value.
+(`pxPerUnit = (1 / PER_INCH[unit]) * dpi`), with an optional readout for the
+native Preferences → Nudge amount value.
 
 ## Development
 
