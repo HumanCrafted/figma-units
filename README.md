@@ -11,18 +11,15 @@ resizes the node.
   (enter `1`, `0.25`, or a fraction like `1/4`).
 - **Width and/or height:** set both or just one — a single-field entry leaves the
   other axis unchanged.
-- **Works on rectangles, frames, and lines:** any resizable node; a line's width is
-  set as its geometric length via `resize(len, 0)`.
-- **Prefill from selection:** the current size fills the fields in the chosen unit
-  when a single node is selected, and tracks live as you drag-resize on the canvas.
 - **Aspect-ratio lock:** set one dimension and scale the other proportionally, with a
   native-style constrain-proportions toggle.
+- **Works on all shape tools, groups, and frames:** any resizable node; a line's width
+  is set as its geometric length.
+- **Pre-fill from selection:** the current size fills the fields in the chosen unit
+  when a single node is selected, and tracks live as you drag-resize on the canvas.
 - **Resize from center:** reposition after resize instead of pinning the top-left.
-- **Ignore child constraints:** `resizeWithoutConstraints()` for frames with children.
 - **Apply to all selected:** the same dimensions to every selected node — explicit, so
   a multi-selection never silently resizes just one.
-- **Persistent settings:** DPI, unit, and scale are saved across sessions via
-  `clientStorage`.
 
 ## Roadmap
 
