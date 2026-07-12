@@ -1,0 +1,361 @@
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 11px/1.4 Inter, -apple-system, sans-serif;
+    margin: 0; padding: 12px;
+    color: var(--figma-color-text, #1e1e1e);
+  }
+  .sectitle { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; opacity: .6; }
+
+  /* Selection status line above the fields. */
+  #status { margin: 0 0 10px; font-size: 11px; opacity: .8; min-height: 14px; }
+
+  /* Native-Figma-style dimension row: [W field] [H field] [lock]. */
+  .dims { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+  .dimfield {
+    flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 5px;
+    height: 32px; padding: 0 8px; cursor: text;
+    background: var(--figma-color-bg-secondary, #f5f5f5);
+    border: 1px solid transparent; border-radius: 5px;
+  }
+  .dimfield .pre, .dimfield .suf { cursor: text; user-select: none; }
+  .dimfield:hover { border-color: var(--figma-color-border, #e6e6e6); }
+  .dimfield:focus-within {
+    border-color: var(--figma-color-border-selected, #0d99ff);
+    background: var(--figma-color-bg, #fff);
+  }
+  .dimfield .pre { flex: none; color: var(--figma-color-text-secondary, #a3a3a3); }
+  .dimfield .suf { flex: none; color: var(--figma-color-text-secondary, #a3a3a3); }
+  .dimfield input {
+    flex: 0 0 auto; width: 2ch; max-width: 100%;
+    border: none; background: none; padding: 0; margin: 0;
+    color: inherit; font: inherit; text-align: left; outline: none;
+  }
+  .dimfield input:disabled { opacity: .4; }
+  .dimfield input::-webkit-outer-spin-button,
+  .dimfield input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .dimfield input[type=number] { -moz-appearance: textfield; }
+
+  /* Aspect-ratio lock — Figma's inline constrain-proportions toggle. */
+  .iconbtn {
+    flex: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid transparent; border-radius: 5px; background: none;
+    color: var(--figma-color-text-secondary, #a3a3a3); cursor: pointer;
+  }
+  .iconbtn:hover { background: var(--figma-color-bg-secondary, #f5f5f5); }
+  .iconbtn.active {
+    color: var(--figma-color-text-onbrand, #fff);
+    background: var(--figma-color-bg-brand, #0d99ff);
+  }
+  .iconbtn svg { width: 16px; height: 16px; display: block; }
+
+  /* Unit segmented control (Dims style). */
+  .seg { display: flex; gap: 4px; margin: 8px 0 4px; }
+  .seg button {
+    flex: 1; height: 26px; cursor: pointer; font-size: 11px;
+    border: 1px solid var(--figma-color-border, #d9d9d9); border-radius: 4px;
+    background: var(--figma-color-bg, #fff); color: inherit;
+  }
+  .seg button.active {
+    background: var(--figma-color-bg-brand, #0d99ff); color: #fff; border-color: transparent;
+  }
+
+  /* Collapsible section: <details class="sec"> with a <summary> styled like a heading. */
+  .sec { margin: 0; }
+  .sec > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    margin: 12px 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; opacity: .6;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sec > summary::-webkit-details-marker { display: none; }
+  .sec > summary::before {
+    content: ""; width: 0; height: 0; flex: none;
+    border-left: 4px solid currentColor; border-top: 3px solid transparent; border-bottom: 3px solid transparent;
+    transition: transform .12s ease;
+  }
+  .sec[open] > summary::before { transform: rotate(90deg); }
+  .check { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+  .check label { opacity: .9; }
+
+  /* Live pixel readout. */
+  #preview { margin: 8px 0 0; font-size: 10px; opacity: .55; min-height: 13px; }
+
+  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .actions button {
+    flex: 1; height: 32px; cursor: pointer; font-size: 11px;
+    border: 1px solid transparent; border-radius: 6px;
+    background: var(--figma-color-bg-brand, #0d99ff); color: var(--figma-color-text-onbrand, #fff);
+  }
+  .actions button:disabled { opacity: .4; cursor: default; }
+  hr { border: none; border-top: 1px solid var(--figma-color-border, #e6e6e6); margin: 12px 0; }
+
+  /* Subtle "buy me a coffee" — muted until hovered, then a warm nod to BMC. */
+  .footer { display: flex; justify-content: center; margin-top: 10px; }
+  .coffee-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 8px; border: none; border-radius: 6px;
+    background: none; color: var(--figma-color-text-secondary, #a3a3a3);
+    font: inherit; font-size: 10px; cursor: pointer; opacity: .7;
+    transition: opacity .12s ease, color .12s ease, background .12s ease;
+  }
+  .coffee-btn:hover { opacity: 1; color: #6f4e37; background: #ffdd0022; }
+  .coffee-btn svg { width: 14px; height: 14px; display: block; }
+</style>
+
+<div class="sectitle">Dimensions</div>
+<div id="status">No selection</div>
+
+<div class="dims">
+  <label class="dimfield">
+    <span class="pre">W</span>
+    <input type="number" id="w" step="any" min="0" placeholder="—">
+    <span class="suf" id="uw">in</span>
+  </label>
+  <label class="dimfield">
+    <span class="pre">H</span>
+    <input type="number" id="h" step="any" min="0" placeholder="—">
+    <span class="suf" id="uh">in</span>
+  </label>
+  <button class="iconbtn" id="lock" type="button" title="Lock aspect ratio" aria-pressed="false">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 7V5.2A1.2 1.2 0 0 1 5.2 4H7"/>
+      <path d="M12 9v1.8a1.2 1.2 0 0 1-1.2 1.2H9"/>
+      <path d="M6.4 9.6l3.2-3.2"/>
+    </svg>
+  </button>
+</div>
+
+<div class="dims">
+  <label class="dimfield">
+    <span class="pre">DPI</span>
+    <input type="number" id="dpi" step="1" min="1">
+  </label>
+  <label class="dimfield">
+    <span class="pre">Scale</span>
+    <input type="text" id="scale" inputmode="text" placeholder="1" title="e.g. 1, 0.25, or 1/4">
+  </label>
+</div>
+
+<div class="seg" id="unit">
+  <button data-u="in" type="button">in</button>
+  <button data-u="ft" type="button">ft</button>
+  <button data-u="mm" type="button">mm</button>
+  <button data-u="cm" type="button">cm</button>
+  <button data-u="m" type="button">m</button>
+</div>
+
+<div id="preview"></div>
+
+<details class="sec">
+  <summary>Options</summary>
+  <div class="check"><input type="checkbox" id="centerAnchor"><label for="centerAnchor">Resize from center</label></div>
+  <div class="check"><input type="checkbox" id="ignoreConstraints"><label for="ignoreConstraints">Ignore child constraints (frames)</label></div>
+  <div class="check"><input type="checkbox" id="applyToAll"><label for="applyToAll">Apply to all selected</label></div>
+</details>
+
+<hr>
+<div class="actions">
+  <button id="apply">Set size</button>
+</div>
+
+<div class="footer">
+  <button id="coffee" class="coffee-btn" type="button" title="Buy me a coffee">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 9h11v5a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9z"/>
+      <path d="M16 10h2.5a2.5 2.5 0 0 1 0 5H16"/>
+      <path d="M8 3c-.4.6-.4 1.4 0 2M11.5 3c-.4.6-.4 1.4 0 2"/>
+    </svg>
+    <span>Buy me a coffee</span>
+  </button>
+</div>
+
+<script>
+  const el = (id) => document.getElementById(id);
+  const settingIds = ['dpi', 'scale', 'centerAnchor', 'ignoreConstraints', 'applyToAll'];
+  let currentUnit = 'in';
+  let aspectLock = false;
+  let baseRatio = null; // W/H of the current single selection, for live proportional entry
+  let sel = { count: 0, lineCount: 0, single: false, nodeType: null };
+
+  // Adaptive poll state — see scheduleNextPoll().
+  let pollHandle = null;
+  let lastW = null, lastH = null; // last size the plugin reported, to detect motion
+  let lastChangeAt = 0;           // timestamp of the last observed size change
+
+  const PER_INCH = { in: 1, ft: 1 / 12, mm: 25.4, cm: 2.54, m: 0.0254 };
+  const num = (v) => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : null; };
+  const tidy = (n) => Math.round(n * 10000) / 10000;
+
+  // Accept a decimal (0.25), a whole number (1), or a fraction (1/4). Falls back
+  // to 1 for empty/invalid input so the conversion never divides by 0. (Same as Dims.)
+  function parseScale(str) {
+    str = String(str == null ? '' : str).trim();
+    if (!str) return 1;
+    if (str.indexOf('/') >= 0) {
+      const p = str.split('/');
+      const a = parseFloat(p[0]), b = parseFloat(p[1]);
+      return (isFinite(a) && isFinite(b) && b !== 0) ? a / b : 1;
+    }
+    const n = parseFloat(str);
+    return (isFinite(n) && n > 0) ? n : 1;
+  }
+
+  // Size a number field to its content so the unit suffix hugs the value (native feel).
+  function fit(input) {
+    const len = (input.value || input.placeholder || '').length;
+    input.style.width = Math.max(1.5, len) + 'ch';
+  }
+
+  function markUnit() {
+    document.querySelectorAll('#unit button').forEach((b) => b.classList.toggle('active', b.dataset.u === currentUnit));
+    el('uw').textContent = currentUnit;
+    el('uh').textContent = currentUnit;
+  }
+
+  function markLock() {
+    el('lock').classList.toggle('active', aspectLock);
+    el('lock').setAttribute('aria-pressed', String(aspectLock));
+  }
+
+  function readSettings() {
+    return {
+      dpi: Math.max(1, +el('dpi').value || 72),
+      unit: currentUnit,
+      scale: parseScale(el('scale').value),
+      aspectLock: aspectLock,
+      centerAnchor: el('centerAnchor').checked,
+      ignoreConstraints: el('ignoreConstraints').checked,
+      applyToAll: el('applyToAll').checked,
+    };
+  }
+  function pushSettings() { parent.postMessage({ pluginMessage: { type: 'settings', settings: readSettings() } }, '*'); }
+
+  // Live px readout: show what the entered values convert to.
+  function updatePreview() {
+    const dpi = Math.max(1, +el('dpi').value || 72);
+    const scale = parseScale(el('scale').value);
+    const w = num(el('w').value), h = num(el('h').value);
+    const px = (v) => Math.round((v / PER_INCH[currentUnit]) * dpi * scale * 100) / 100;
+    const parts = [];
+    if (w != null) parts.push('W ' + px(w) + ' px');
+    if (h != null && sel.nodeType !== 'LINE') parts.push('H ' + px(h) + ' px');
+    el('preview').textContent = parts.length ? '= ' + parts.join('  ·  ') : '';
+  }
+
+  // With the lock on and a known ratio, mirror native Figma: editing one axis
+  // updates the other proportionally as you type.
+  function syncPair(edited) {
+    if (!aspectLock || !baseRatio) return;
+    if (edited === 'w') {
+      const w = num(el('w').value);
+      el('h').value = w != null ? tidy(w / baseRatio) : '';
+    } else {
+      const h = num(el('h').value);
+      el('w').value = h != null ? tidy(h * baseRatio) : '';
+    }
+  }
+
+  function refreshEnabled() {
+    const lineOnly = sel.single && sel.nodeType === 'LINE';
+    el('h').disabled = lineOnly;
+    el('lock').disabled = lineOnly;
+    if (lineOnly) el('h').value = '';
+    el('apply').disabled = sel.count === 0;
+    updatePreview();
+  }
+
+  function apply() {
+    const w = num(el('w').value);
+    const h = (sel.single && sel.nodeType === 'LINE') ? null : num(el('h').value);
+    parent.postMessage({ pluginMessage: { type: 'apply', width: w, height: h } }, '*');
+  }
+
+  // --- wire up ---
+  el('w').addEventListener('input', () => { syncPair('w'); fit(el('w')); fit(el('h')); updatePreview(); });
+  el('h').addEventListener('input', () => { syncPair('h'); fit(el('w')); fit(el('h')); updatePreview(); });
+  settingIds.forEach((id) => {
+    const node = el(id);
+    node.addEventListener(node.type === 'checkbox' ? 'change' : 'input', () => {
+      pushSettings();
+      if (id === 'dpi' || id === 'scale') { fit(node); updatePreview(); }
+    });
+  });
+  document.querySelectorAll('#unit button').forEach((b) => {
+    b.onclick = () => { currentUnit = b.dataset.u; markUnit(); pushSettings(); updatePreview(); };
+  });
+  el('lock').onclick = () => { aspectLock = !aspectLock; markLock(); pushSettings(); };
+  el('apply').onclick = apply;
+  el('coffee').onclick = () => parent.postMessage({ pluginMessage: { type: 'coffee' } }, '*');
+  ['w', 'h'].forEach((id) => el(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(); }));
+
+  function syncHeight() {
+    requestAnimationFrame(() => {
+      const last = el('apply');
+      const h = Math.ceil(last.offsetTop + last.offsetHeight) + 12;
+      parent.postMessage({ pluginMessage: { type: 'resize', height: h } }, '*');
+    });
+  }
+  document.querySelectorAll('.sec').forEach((d) => d.addEventListener('toggle', syncHeight));
+
+  // Poll the plugin so the fields track live canvas changes (drag-resize).
+  // documentchange does NOT fire during an interactive drag, and Figma exposes
+  // no drag event, so a poll is the only way. To avoid running flat-out the
+  // whole time, we only poll while a single node is selected (the only case we
+  // track live), and adapt the rate: a slow heartbeat when idle — just enough
+  // to notice a drag has begun — ramping fast while the size is changing, then
+  // easing off once motion stops. Nothing selected => no polling at all.
+  const POLL_IDLE = 250, POLL_ACTIVE = 70, ACTIVE_WINDOW = 600;
+  function scheduleNextPoll() {
+    clearTimeout(pollHandle);
+    if (!sel.single) return; // only a single selection is tracked live
+    const active = (Date.now() - lastChangeAt) < ACTIVE_WINDOW;
+    pollHandle = setTimeout(() => {
+      parent.postMessage({ pluginMessage: { type: 'poll' } }, '*');
+      scheduleNextPoll();
+    }, active ? POLL_ACTIVE : POLL_IDLE);
+  }
+
+  onmessage = (e) => {
+    const msg = e.data.pluginMessage;
+    if (!msg) return;
+    if (msg.type === 'init') {
+      const s = msg.settings;
+      el('dpi').value = s.dpi;
+      el('scale').value = s.scale != null ? s.scale : 1;
+      currentUnit = s.unit || 'in';
+      aspectLock = !!s.aspectLock;
+      el('centerAnchor').checked = !!s.centerAnchor;
+      el('ignoreConstraints').checked = !!s.ignoreConstraints;
+      el('applyToAll').checked = !!s.applyToAll;
+      markUnit();
+      markLock();
+      fit(el('w')); fit(el('h')); fit(el('dpi')); fit(el('scale'));
+      syncHeight();
+    } else if (msg.type === 'selection') {
+      sel = msg;
+      if (msg.count === 0) el('status').textContent = 'No selection';
+      else if (msg.single) el('status').textContent = 'Selected: ' + (msg.nodeType || 'node').toLowerCase();
+      else el('status').textContent = msg.count + ' objects selected'
+        + (msg.lineCount ? ' (' + msg.lineCount + ' line' + (msg.lineCount === 1 ? '' : 's') + ')' : '');
+      // A size change vs. what we last showed means the node is being resized
+      // (a drag) — mark it so the poll ramps to its fast rate.
+      if (msg.single && (msg.width !== lastW || msg.height !== lastH)) lastChangeAt = Date.now();
+      lastW = msg.single ? msg.width : null;
+      lastH = msg.single ? msg.height : null;
+      // Prefill from a single selection; capture its ratio for locked entry.
+      if (msg.single) {
+        el('w').value = msg.width != null ? msg.width : '';
+        el('h').value = msg.height != null ? msg.height : '';
+        baseRatio = (msg.width && msg.height) ? msg.width / msg.height : null;
+      } else {
+        el('w').value = '';
+        el('h').value = '';
+        baseRatio = null;
+      }
+      fit(el('w')); fit(el('h'));
+      refreshEnabled();
+      scheduleNextPoll(); // (re)arm or stop polling based on the new selection
+    }
+  };
+</script>
