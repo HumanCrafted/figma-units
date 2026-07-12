@@ -7,19 +7,22 @@ resizes the node.
 
 ## Features
 
-- Set **width and/or height** in `in`, `ft`, `mm`, `cm`, or `m` at any DPI.
-- **Drawing scale** — enter `1`, `0.25`, or a fraction like `1/4`; the entered
-value is the real-world size and the node is set to `size / scale` on canvas.
-- Single-field entry — set just W or just H, leaving the other unchanged.
-- Works on **rectangles, frames** (and other resizable containers), and **lines**
-(a line's width is set as its geometric length via `resize(len, 0)`).
-- Current size **prefills** the fields in the chosen unit when one node is selected.
-- **Lock aspect ratio** — set one dimension, scale the other proportionally.
-- **Resize from center** — reposition after resize instead of pinning top-left.
-- **Ignore child constraints** — `resizeWithoutConstraints()` for frames with children.
-- **Apply to all selected** — same dimensions to every selected node (explicit; a
-multi-selection won't silently resize just one).
-- DPI and unit persist across sessions via `clientStorage`.
+- **Real-world units:** in, ft, mm, cm, m, with a configurable DPI and drawing scale
+  (enter `1`, `0.25`, or a fraction like `1/4`).
+- **Width and/or height:** set both or just one — a single-field entry leaves the
+  other axis unchanged.
+- **Works on rectangles, frames, and lines:** any resizable node; a line's width is
+  set as its geometric length via `resize(len, 0)`.
+- **Prefill from selection:** the current size fills the fields in the chosen unit
+  when a single node is selected, and tracks live as you drag-resize on the canvas.
+- **Aspect-ratio lock:** set one dimension and scale the other proportionally, with a
+  native-style constrain-proportions toggle.
+- **Resize from center:** reposition after resize instead of pinning the top-left.
+- **Ignore child constraints:** `resizeWithoutConstraints()` for frames with children.
+- **Apply to all selected:** the same dimensions to every selected node — explicit, so
+  a multi-selection never silently resizes just one.
+- **Persistent settings:** DPI, unit, and scale are saved across sessions via
+  `clientStorage`.
 
 ## Roadmap
 
@@ -39,3 +42,11 @@ npm run watch      # recompile on change
 Then in Figma: **Plugins → Development → Import plugin from manifest…** and pick
 `manifest.json`. The compiled `code.js` is committed so the plugin loads without
 a build step.
+
+## Credits
+
+Units was developed with the assistance of [Claude Code](https://claude.com/claude-code).
+
+## License
+
+MIT (c) Human Crafted, LLC. See [LICENSE](LICENSE) for details.
