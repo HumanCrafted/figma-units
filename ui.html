@@ -33,6 +33,9 @@
     color: inherit; font: inherit; text-align: left; outline: none;
   }
   .dimfield input:disabled { opacity: .4; }
+  /* Scale is free text (decimals, fractions) and can get long — let it fill the
+     field and clip overlong values with an ellipsis instead of spilling past. */
+  #scale { flex: 1 1 0; width: auto; min-width: 0; text-overflow: ellipsis; }
   .dimfield input::-webkit-outer-spin-button,
   .dimfield input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .dimfield input[type=number] { -moz-appearance: textfield; }
@@ -278,7 +281,8 @@
     const node = el(id);
     node.addEventListener(node.type === 'checkbox' ? 'change' : 'input', () => {
       pushSettings();
-      if (id === 'dpi' || id === 'scale') { fit(node); updatePreview(); }
+      if (id === 'dpi') fit(node);
+      if (id === 'dpi' || id === 'scale') updatePreview();
     });
   });
   document.querySelectorAll('#unit button').forEach((b) => {
@@ -332,7 +336,7 @@
       el('applyToAll').checked = !!s.applyToAll;
       markUnit();
       markLock();
-      fit(el('w')); fit(el('h')); fit(el('dpi')); fit(el('scale'));
+      fit(el('w')); fit(el('h')); fit(el('dpi'));
       syncHeight();
     } else if (msg.type === 'selection') {
       sel = msg;
