@@ -11,6 +11,11 @@ resizes the node.
   (enter `1`, `0.25`, or a fraction like `1/4`).
 - **Width and/or height:** set both or just one — a single-field entry leaves the
   other axis unchanged.
+- **Stroke weight:** set line weight in the same units, as a pen weight — converted at
+  DPI only, so the drawing scale doesn't apply (0.35 mm stays 0.35 mm at any scale).
+- **Corner radius:** set in the same units on rectangles, frames, polygons, stars and
+  vectors. Radius is part of the object's geometry, so it follows the drawing scale
+  like width and height.
 - **Aspect-ratio lock:** set one dimension and scale the other proportionally, with a
   native-style constrain-proportions toggle.
 - **Works on all shape tools, groups, and frames:** any resizable node; a line's width

@@ -27,8 +27,10 @@
   }
   .dimfield .pre { flex: none; color: var(--figma-color-text-secondary, #a3a3a3); }
   .dimfield .suf { flex: none; color: var(--figma-color-text-secondary, #a3a3a3); }
+  /* The value may shrink (with an ellipsis) so a long number never pushes the
+     unit suffix out of the field. */
   .dimfield input {
-    flex: 0 0 auto; width: 2ch; max-width: 100%;
+    flex: 0 1 auto; width: 2ch; max-width: 100%; min-width: 0; text-overflow: ellipsis;
     border: none; background: none; padding: 0; margin: 0;
     color: inherit; font: inherit; text-align: left; outline: none;
   }
@@ -82,7 +84,14 @@
   .check label { opacity: .9; }
 
   /* Live pixel readout. */
-  #preview { margin: 4px 0 0; font-size: 10px; opacity: .55; min-height: 13px; }
+  /* Always one line: if it wrapped, the window would jump in height as the
+     selection changes. Very large values clip with an ellipsis instead. The
+     fixed height keeps it the same size empty or filled, so the window height
+     measured on open stays right. */
+  #preview {
+    margin: 4px 0 0; font-size: 10px; line-height: 14px; height: 14px; opacity: .55;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
 
   .actions { display: flex; gap: 8px; margin-top: 10px; }
   .actions button {
@@ -127,6 +136,19 @@
       <path d="M6.4 9.6l3.2-3.2"/>
     </svg>
   </button>
+</div>
+
+<div class="dims">
+  <label class="dimfield" title="Stroke weight — a pen weight, converted at DPI only (the drawing scale doesn't apply)">
+    <span class="pre">Stroke</span>
+    <input type="number" id="stroke" step="any" min="0" placeholder="—">
+    <span class="suf" id="us">in</span>
+  </label>
+  <label class="dimfield" title="Corner radius — converted like W/H (the drawing scale applies)">
+    <span class="pre">Radius</span>
+    <input type="number" id="radius" step="any" min="0" placeholder="—">
+    <span class="suf" id="ur">in</span>
+  </label>
 </div>
 
 <div class="dims">
@@ -179,7 +201,7 @@
   let currentUnit = 'in';
   let aspectLock = false;
   let baseRatio = null; // W/H of the current single selection, for live proportional entry
-  let sel = { count: 0, lineCount: 0, single: false, nodeType: null };
+  let sel = { count: 0, lineCount: 0, single: false, nodeType: null, hasStroke: false, stroke: null, hasRadius: false, radius: null };
 
   // Adaptive poll state — see scheduleNextPoll().
   let pollHandle = null;
@@ -188,6 +210,8 @@
 
   const PER_INCH = { in: 1, ft: 1 / 12, mm: 25.4, cm: 2.54, m: 0.0254 };
   const num = (v) => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : null; };
+  // Stroke and radius may legitimately be 0 (no stroke weight, square corners).
+  const num0 = (v) => { const n = parseFloat(v); return isFinite(n) && n >= 0 ? n : null; };
   const tidy = (n) => Math.round(n * 10000) / 10000;
 
   // Accept a decimal (0.25), a whole number (1), or a fraction (1/4). Falls back
@@ -205,15 +229,22 @@
   }
 
   // Size a number field to its content so the unit suffix hugs the value (native feel).
+  // Measured in the field's real font: a character count in `ch` undersizes
+  // letters like "None", and the ellipsis then clips them.
+  const measureCtx = document.createElement('canvas').getContext('2d');
   function fit(input) {
-    const len = (input.value || input.placeholder || '').length;
-    input.style.width = Math.max(1.5, len) + 'ch';
+    measureCtx.font = getComputedStyle(input).font;
+    const text = input.value || input.placeholder || '';
+    const w = Math.max(measureCtx.measureText(text).width, measureCtx.measureText('0').width * 1.5);
+    input.style.width = Math.ceil(w) + 2 + 'px'; // +2 leaves room for the caret
   }
 
   function markUnit() {
     document.querySelectorAll('#unit button').forEach((b) => b.classList.toggle('active', b.dataset.u === currentUnit));
     el('uw').textContent = currentUnit;
     el('uh').textContent = currentUnit;
+    el('us').textContent = currentUnit;
+    el('ur').textContent = currentUnit;
   }
 
   function markLock() {
@@ -234,16 +265,22 @@
   }
   function pushSettings() { parent.postMessage({ pluginMessage: { type: 'settings', settings: readSettings() } }, '*'); }
 
-  // Live px readout: show what the entered values convert to.
+  // Live px readout: show what the entered values convert to. Stroke is a pen
+  // weight, so it converts at DPI only — no drawing scale. Radius is geometry
+  // and scales like W/H.
   function updatePreview() {
     const dpi = Math.max(1, +el('dpi').value || 72);
     const scale = parseScale(el('scale').value);
     const w = num(el('w').value), h = num(el('h').value);
-    const px = (v) => Math.round((v / PER_INCH[currentUnit]) * dpi * scale * 100) / 100;
+    const s = num0(el('stroke').value), r = num0(el('radius').value);
+    const px = (v, sc) => Math.round((v / PER_INCH[currentUnit]) * dpi * sc * 100) / 100;
     const parts = [];
-    if (w != null) parts.push('W ' + px(w) + ' px');
-    if (h != null && sel.nodeType !== 'LINE') parts.push('H ' + px(h) + ' px');
+    if (w != null) parts.push('W ' + px(w, scale) + ' px');
+    if (h != null && sel.nodeType !== 'LINE') parts.push('H ' + px(h, scale) + ' px');
+    if (s != null && !el('stroke').disabled) parts.push('S ' + px(s, 1) + ' px');
+    if (r != null && !el('radius').disabled) parts.push('R ' + px(r, scale) + ' px');
     el('preview').textContent = parts.length ? '= ' + parts.join('  ·  ') : '';
+    el('preview').title = el('preview').textContent; // full text if it's ever clipped
   }
 
   // With the lock on and a known ratio, mirror native Figma: editing one axis
@@ -264,6 +301,16 @@
     el('h').disabled = lineOnly;
     el('lock').disabled = lineOnly;
     if (lineOnly) el('h').value = '';
+    // No stroke anywhere in the selection -> nothing to weight. Per-side weights
+    // that differ come back as 'mixed': leave the field blank but say so.
+    el('stroke').disabled = sel.count > 0 && !sel.hasStroke;
+    el('stroke').placeholder = el('stroke').disabled ? 'None' : (sel.stroke === 'mixed' ? 'Mixed' : '—');
+    fit(el('stroke'));
+    // Same for corners: nothing in the selection can be rounded (groups, lines,
+    // text, ellipses) -> disable; differing per-corner radii read as 'mixed'.
+    el('radius').disabled = sel.count > 0 && !sel.hasRadius;
+    el('radius').placeholder = sel.radius === 'mixed' ? 'Mixed' : '—';
+    fit(el('radius'));
     el('apply').disabled = sel.count === 0;
     updatePreview();
   }
@@ -271,12 +318,15 @@
   function apply() {
     const w = num(el('w').value);
     const h = (sel.single && sel.nodeType === 'LINE') ? null : num(el('h').value);
-    parent.postMessage({ pluginMessage: { type: 'apply', width: w, height: h } }, '*');
+    const s = el('stroke').disabled ? null : num0(el('stroke').value);
+    const r = el('radius').disabled ? null : num0(el('radius').value);
+    parent.postMessage({ pluginMessage: { type: 'apply', width: w, height: h, stroke: s, radius: r } }, '*');
   }
 
   // --- wire up ---
   el('w').addEventListener('input', () => { syncPair('w'); fit(el('w')); fit(el('h')); updatePreview(); });
   el('h').addEventListener('input', () => { syncPair('h'); fit(el('w')); fit(el('h')); updatePreview(); });
+  ['stroke', 'radius'].forEach((id) => el(id).addEventListener('input', () => { fit(el(id)); updatePreview(); }));
   settingIds.forEach((id) => {
     const node = el(id);
     node.addEventListener(node.type === 'checkbox' ? 'change' : 'input', () => {
@@ -291,14 +341,17 @@
   el('lock').onclick = () => { aspectLock = !aspectLock; markLock(); pushSettings(); };
   el('apply').onclick = apply;
   el('coffee').onclick = () => parent.postMessage({ pluginMessage: { type: 'coffee' } }, '*');
-  ['w', 'h'].forEach((id) => el(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(); }));
+  ['w', 'h', 'stroke', 'radius'].forEach((id) => el(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(); }));
 
   function syncHeight() {
     requestAnimationFrame(() => {
       // Measure to the last visible element (the coffee footer) so the window
       // always grows enough to include it — not just up to the Set button.
+      // Use the fractional rect, not offsetTop/offsetHeight: those round to whole
+      // pixels, and coming up even 0.4px short gives the window a scrollbar with
+      // nothing to scroll (which also steals width from the layout).
       const last = document.querySelector('.footer') || el('apply');
-      const h = Math.ceil(last.offsetTop + last.offsetHeight) + 12;
+      const h = Math.ceil(last.getBoundingClientRect().bottom + window.scrollY) + 12;
       parent.postMessage({ pluginMessage: { type: 'resize', height: h } }, '*');
     });
   }
@@ -336,7 +389,7 @@
       el('applyToAll').checked = !!s.applyToAll;
       markUnit();
       markLock();
-      fit(el('w')); fit(el('h')); fit(el('dpi'));
+      fit(el('w')); fit(el('h')); fit(el('stroke')); fit(el('radius')); fit(el('dpi'));
       syncHeight();
     } else if (msg.type === 'selection') {
       sel = msg;
@@ -353,10 +406,14 @@
       if (msg.single) {
         el('w').value = msg.width != null ? msg.width : '';
         el('h').value = msg.height != null ? msg.height : '';
+        el('stroke').value = typeof msg.stroke === 'number' ? msg.stroke : '';
+        el('radius').value = typeof msg.radius === 'number' ? msg.radius : '';
         baseRatio = (msg.width && msg.height) ? msg.width / msg.height : null;
       } else {
         el('w').value = '';
         el('h').value = '';
+        el('stroke').value = '';
+        el('radius').value = '';
         baseRatio = null;
       }
       fit(el('w')); fit(el('h'));

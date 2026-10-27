@@ -18,6 +18,13 @@
  * resize(len, 0) sets the true span along the line's own axis at any rotation
  * — the bounding-box wrinkle Dims solved on read doesn't bite us on write.
  *
+ * Stroke weight is set in the same units but treated as a PEN weight: it is
+ * converted at DPI only and ignores the drawing scale, the way a 0.35mm line
+ * stays 0.35mm on paper whether the drawing is 1:1 or 1/4" = 1'.
+ *
+ * Corner radius, by contrast, is part of the object's geometry (a 1/4" radius
+ * on a real part), so it converts exactly like width/height, scale included.
+ *
  * Conventions inherited from Dims: TypeScript + standard plugin structure,
  * `hcd:` pluginData namespace, DPI/unit persisted via clientStorage, Figma
  * theme colors in the UI. No text is drawn, so there are no font concerns.
@@ -90,6 +97,27 @@ function isLine(n: SceneNode): n is LineNode {
   return n.type === 'LINE';
 }
 
+type Stroked = SceneNode & MinimalStrokesMixin;
+
+/** Anything that carries a stroke weight (shapes, frames, text) — not the same
+ *  set as resizable: groups and slices resize but have no stroke. */
+function hasStrokes(n: SceneNode): n is Stroked {
+  return 'strokeWeight' in n;
+}
+
+type Cornered = SceneNode & CornerMixin;
+
+/** Nodes with a corner radius worth setting. Ellipses carry the property too,
+ *  but it does nothing visible on a closed ellipse, so they're left out. */
+function hasCorners(n: SceneNode): n is Cornered {
+  return 'cornerRadius' in n && n.type !== 'ELLIPSE';
+}
+
+/** Something Units can act on: its size, stroke weight, or corner radius. */
+function isTarget(n: SceneNode): boolean {
+  return isResizable(n) || hasStrokes(n) || hasCorners(n);
+}
+
 /** A container whose children carry constraints, so the resize() vs
  *  resizeWithoutConstraints() choice is meaningful. */
 function hasConstrainedChildren(n: SceneNode): boolean {
@@ -102,6 +130,8 @@ function hasConstrainedChildren(n: SceneNode): boolean {
 interface ApplyMsg {
   width: number | null;  // in current unit; null = leave unchanged
   height: number | null; // in current unit; null = leave unchanged
+  stroke: number | null; // in current unit, ignoring scale; null = leave unchanged
+  radius: number | null; // in current unit, with scale; null = leave unchanged
 }
 
 /**
@@ -152,6 +182,51 @@ function applyToNode(node: SceneNode, msg: ApplyMsg): boolean {
   return true;
 }
 
+/**
+ * Set a node's stroke weight from a value in the current unit. Converted at DPI
+ * only (scale = 1): stroke weight is a pen weight, not a scaled dimension.
+ * Returns false if the node has no stroke to weight.
+ */
+function applyStroke(node: SceneNode, value: number): boolean {
+  if (!hasStrokes(node) || !node.strokes.length) return false;
+
+  // The field prefills with the current weight rounded to 4 decimals, so
+  // re-applying it untouched would nudge the weight by that rounding error.
+  const cur = node.strokeWeight;
+  if (typeof cur === 'number' && tidy(toUnit(cur, settings.unit, settings.dpi, 1)) === value) return true;
+
+  const px = toPx(value, settings.unit, settings.dpi, 1);
+  node.strokeWeight = px;
+  // Rectangles/frames with per-side weights: make sure every side took it.
+  if (node.strokeWeight !== px && 'strokeTopWeight' in node) {
+    const sides = node as Stroked & IndividualStrokesMixin;
+    sides.strokeTopWeight = sides.strokeBottomWeight = sides.strokeLeftWeight = sides.strokeRightWeight = px;
+  }
+  return true;
+}
+
+/**
+ * Set a node's corner radius from a value in the current unit. Unlike stroke,
+ * radius is geometry, so the drawing scale applies. Returns false if the node
+ * has no corners to round.
+ */
+function applyRadius(node: SceneNode, value: number): boolean {
+  if (!hasCorners(node)) return false;
+
+  // Same prefill-rounding guard as applyStroke.
+  const cur = node.cornerRadius;
+  if (typeof cur === 'number' && tidy(toUnit(cur, settings.unit, settings.dpi, settings.scale)) === value) return true;
+
+  const px = toPx(value, settings.unit, settings.dpi, settings.scale);
+  node.cornerRadius = px;
+  // Rectangles/frames with per-corner radii: make sure every corner took it.
+  if (node.cornerRadius !== px && 'topLeftRadius' in node) {
+    const corners = node as Cornered & RectangleCornerMixin;
+    corners.topLeftRadius = corners.topRightRadius = corners.bottomLeftRadius = corners.bottomRightRadius = px;
+  }
+  return true;
+}
+
 // ---------- selection reporting ----------
 
 /** Round to at most 4 decimals and drop trailing zeros, for clean field prefills. */
@@ -164,33 +239,64 @@ function tidy(n: number): number {
 // poll would overwrite a value the user is mid-typing every tick.
 let lastSig = '';
 
-function selectionSignature(sel: Resizable[]): string {
-  const parts = sel.map((n) => `${n.id}:${n.width}:${n.height}`);
+function strokeSignature(n: SceneNode): string {
+  if (!hasStrokes(n)) return '-';
+  // strokeWeight can be figma.mixed (a symbol), which can't go in a template.
+  const w = typeof n.strokeWeight === 'number' ? n.strokeWeight : 'mixed';
+  return `${n.strokes.length}/${w}`;
+}
+
+function radiusSignature(n: SceneNode): string {
+  if (!hasCorners(n)) return '-';
+  return typeof n.cornerRadius === 'number' ? String(n.cornerRadius) : 'mixed';
+}
+
+function selectionSignature(sel: SceneNode[]): string {
+  const parts = sel.map((n) => `${n.id}:${n.width}:${n.height}:${strokeSignature(n)}:${radiusSignature(n)}`);
   // Include unit/dpi/scale so a settings change re-expresses the current size.
   return `${settings.unit}|${settings.dpi}|${settings.scale}|${parts.join(',')}`;
 }
 
 /**
- * Report the current selection to the UI: how many resizable nodes, whether any
- * are lines, and — for a single selection — its current size in the chosen unit
- * so the fields prefill (the inverse-of-Dims convenience). No-ops when nothing
- * observable changed since the last report.
+ * Report the current selection to the UI: how many target nodes, whether any
+ * are lines or have a stroke or corners, and — for a single selection — its
+ * current size, stroke weight and radius in the chosen unit so the fields
+ * prefill (the inverse-of-Dims convenience). No-ops when nothing observable
+ * changed since the last report.
  */
 function reportSelection() {
-  const sel = figma.currentPage.selection.filter(isResizable);
+  const sel = figma.currentPage.selection.filter(isTarget);
   const sig = selectionSignature(sel);
   if (sig === lastSig) return;
   lastSig = sig;
   const lineCount = sel.filter(isLine).length;
+  const hasStroke = sel.some((n) => hasStrokes(n) && n.strokes.length > 0);
+  const hasRadius = sel.some(hasCorners);
   let width: number | null = null;
   let height: number | null = null;
+  let stroke: number | 'mixed' | null = null;
+  let radius: number | 'mixed' | null = null;
   let type: string | null = null;
 
   if (sel.length === 1) {
     const n = sel[0];
     type = n.type;
-    width = tidy(toUnit(n.width, settings.unit, settings.dpi, settings.scale));
-    height = isLine(n) ? null : tidy(toUnit(n.height, settings.unit, settings.dpi, settings.scale));
+    if (isResizable(n)) {
+      width = tidy(toUnit(n.width, settings.unit, settings.dpi, settings.scale));
+      height = isLine(n) ? null : tidy(toUnit(n.height, settings.unit, settings.dpi, settings.scale));
+    }
+    if (hasStroke && hasStrokes(n)) {
+      // Per-side weights that differ read back as figma.mixed.
+      stroke = typeof n.strokeWeight === 'number'
+        ? tidy(toUnit(n.strokeWeight, settings.unit, settings.dpi, 1))
+        : 'mixed';
+    }
+    if (hasCorners(n)) {
+      // Per-corner radii that differ (or per-vertex on vectors) read as figma.mixed.
+      radius = typeof n.cornerRadius === 'number'
+        ? tidy(toUnit(n.cornerRadius, settings.unit, settings.dpi, settings.scale))
+        : 'mixed';
+    }
   }
 
   figma.ui.postMessage({
@@ -201,6 +307,10 @@ function reportSelection() {
     nodeType: type,
     width,
     height,
+    hasStroke,
+    stroke,
+    hasRadius,
+    radius,
   });
 }
 
@@ -211,13 +321,14 @@ figma.showUI(__html__, { width: UI_WIDTH, height: 340, themeColors: true });
 
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'apply') {
-    const sel = figma.currentPage.selection.filter(isResizable);
+    const sel = figma.currentPage.selection.filter(isTarget);
     if (!sel.length) {
       figma.notify('Select a rectangle, frame, or line first');
       return;
     }
-    if (msg.width == null && msg.height == null) {
-      figma.notify('Enter a width and/or height');
+    const sizeGiven = msg.width != null || msg.height != null;
+    if (!sizeGiven && msg.stroke == null && msg.radius == null) {
+      figma.notify('Enter a width, height, stroke weight, or radius');
       return;
     }
     // Don't silently resize just one of many: multi-select requires an explicit
@@ -228,11 +339,25 @@ figma.ui.onmessage = async (msg) => {
     }
     const targets = settings.applyToAll ? sel : [sel[0]];
     let done = 0;
+    let noStroke = 0;
+    let noCorners = 0;
     for (const n of targets) {
-      if (applyToNode(n, { width: msg.width, height: msg.height })) done++;
+      let changed = false;
+      if (sizeGiven && applyToNode(n, msg)) changed = true;
+      if (msg.stroke != null) {
+        if (applyStroke(n, msg.stroke)) changed = true;
+        else noStroke++;
+      }
+      if (msg.radius != null) {
+        if (applyRadius(n, msg.radius)) changed = true;
+        else noCorners++;
+      }
+      if (changed) done++;
     }
     const suffix = settings.applyToAll && sel.length > 1 ? ` (of ${sel.length} selected)` : '';
-    figma.notify(done ? `Resized ${done} object${done === 1 ? '' : 's'}${suffix}` : 'Nothing resizable in selection');
+    const skipped = (noStroke ? ` · ${noStroke} without a stroke skipped` : '')
+      + (noCorners ? ` · ${noCorners} without corners skipped` : '');
+    figma.notify((done ? `Updated ${done} object${done === 1 ? '' : 's'}${suffix}` : 'Nothing to update in selection') + skipped);
     reportSelection(); // reflect the new sizes back into the fields
   } else if (msg.type === 'settings') {
     settings = { ...settings, ...msg.settings };
@@ -258,15 +383,20 @@ figma.on('selectionchange', reportSelection);
  * Live-refresh the fields when a selected node's size changes on the canvas
  * (e.g. the user drags a resize handle). We only READ sizes here and post them
  * to the UI — no document mutation — so unlike Dims' live label recalc this
- * needs no reentrancy guard. Watches width/height only; a plain move (x/y) is
- * ignored since it doesn't change the dimensions.
+ * needs no reentrancy guard. Watches size, stroke and radius only; a plain
+ * move (x/y) is ignored since it changes none of them.
  */
+const WATCHED: NodeChangeProperty[] = [
+  'width', 'height', 'strokeWeight', 'strokes',
+  'cornerRadius', 'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius',
+];
+
 function onDocChange(e: DocumentChangeEvent) {
   const selIds = new Set(figma.currentPage.selection.map((n) => n.id));
   if (!selIds.size) return;
   for (const c of e.documentChanges) {
     if (c.type !== 'PROPERTY_CHANGE') continue;
-    if (!(c.properties.includes('width') || c.properties.includes('height'))) continue;
+    if (!c.properties.some((p) => WATCHED.includes(p))) continue;
     const n = c.node as SceneNode;
     if (n && !n.removed && selIds.has(n.id)) {
       reportSelection();
